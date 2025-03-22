@@ -1,0 +1,5 @@
+log_level: "DEBUG"
+app_address: ":8080"
+read_timeout: 3s
+db:
+  pool_min_conns: 2

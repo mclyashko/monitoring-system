@@ -1,0 +1,49 @@
+networks:
+  monitoring-system-network:
+    driver: bridge
+
+services:
+  db:
+    container_name: db
+    image: postgres:17
+    command: ["postgres", "-c", "log_statement=all"]
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DB}
+    networks:
+      - monitoring-system-network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${DB_DB} -U $${DB_USER}"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+    ports:
+      - "5432:5432"
+  test-service-go:
+    platform: linux/amd64
+    build:
+      context: ../services/test-service-go
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DB_CONN_STRING: postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DB}?sslmode=disable
+    networks:
+      - monitoring-system-network
+    restart: "always"
+    healthcheck:
+      test: "wget --quiet --spider --timeout=10 http://localhost:8080/ || exit 1"
+      interval: 10s
+      timeout: 30s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
