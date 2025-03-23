@@ -6,9 +6,9 @@ services:
   db:
     container_name: db
     image: postgres:17
-    command: ["postgres", "-c", "log_statement=all"]
+    command: "postgres -c log_statement=all"
     volumes:
-      - ./pg_data:/var/lib/postgresql/data
+      - ./pg-data:/var/lib/postgresql/data
     env_file:
       - .env
     environment:
@@ -19,14 +19,15 @@ services:
       - monitoring-system-network
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d $${DB_DB} -U $${DB_USER}"]
+      test: "pg_isready -d $${DB_DB} -U $${DB_USER}"
       interval: 10s
       timeout: 30s
       retries: 5
     ports:
       - "5432:5432"
   test-service-go:
-    platform: linux/amd64
+    container_name: test-service-go
+    image: test-service-go:latest
     build:
       context: ../services/test-service-go
       dockerfile: Dockerfile
@@ -47,3 +48,14 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+  tests:
+    container_name: tests
+    image: tests:latest
+    build: 
+      context: ../tests
+      dockerfile: Dockerfile
+    entrypoint: "true"
+    restart: "no"
+    depends_on:
+      test-service-go:
+        condition: service_healthy

@@ -12,6 +12,7 @@ import (
 	"github.com/mclyashko/monitoring-system/services/test-service-go/adapters/db"
 	"github.com/mclyashko/monitoring-system/services/test-service-go/adapters/rest"
 	"github.com/mclyashko/monitoring-system/services/test-service-go/config"
+	"github.com/mclyashko/monitoring-system/services/test-service-go/core"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 
 	mustMakeMigrations(log, storage, cfg.DB.DBConnString)
 
-	mux := mustMakeMux(log)
+	mux := mustMakeMux(log, storage)
 
 	server := &http.Server{
 		Addr:        cfg.AppAddress,
@@ -107,10 +108,14 @@ func mustMakeMigrations(log *slog.Logger, db *db.DB, connString string) {
 	}
 }
 
-func mustMakeMux(log *slog.Logger) *http.ServeMux {
+func mustMakeMux(log *slog.Logger, repo core.OrderRepository) *http.ServeMux {
 	mux := http.NewServeMux()
 
+	orderService := core.NewOrderService(log, repo)
+
 	mux.HandleFunc("GET /", rest.NewPingHandler(log))
+	mux.HandleFunc("GET /order/{id}", rest.NewGetOrderByIDHandler(log, orderService))
+	mux.HandleFunc("POST /order", rest.NewCreateOrderHandler(log, orderService))
 
 	log.Info("mux initialized with routes")
 

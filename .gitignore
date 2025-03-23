@@ -231,4 +231,4 @@ Temporary Items
 *.log
 
 # Volume data
-/deploy/pg_data/
+/deploy/pg-data/

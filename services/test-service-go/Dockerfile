@@ -9,4 +9,4 @@ FROM alpine:latest
 COPY --from=builder /app/test-service-go /usr/local/bin/test-service-go
 COPY config.yaml /etc/test-service-go/config.yaml
 EXPOSE 8080
-CMD ["test-service-go", "-config", "/etc/test-service-go/config.yaml"]
+ENTRYPOINT ["test-service-go", "-config", "/etc/test-service-go/config.yaml"]
