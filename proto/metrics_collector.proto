@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package proto;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "adapters/grpc/proto";
+
+message SendMetricRequest {
+  string service_url = 1;
+  string metric_name = 2;
+  string pod_name = 3;
+  double metric_value = 4;
+}
+
+message SendMetricResponse {
+  google.protobuf.Timestamp time = 1;
+  string service_url = 2;
+  string metric_name = 3; 
+  string pod_name = 4;
+}
+
+service MetricsCollector {
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc SendMetric (SendMetricRequest) returns (SendMetricResponse) {}
+}

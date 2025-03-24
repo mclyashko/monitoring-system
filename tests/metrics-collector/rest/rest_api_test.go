@@ -1,4 +1,4 @@
-package metrics_collector_test
+package metrics_collector_rest_api_test
 
 import (
 	"bytes"

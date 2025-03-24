@@ -8,5 +8,6 @@ RUN go build -o metrics-collector .
 FROM alpine:latest
 COPY --from=builder /app/metrics-collector /usr/local/bin/metrics-collector
 COPY config.yaml /etc/metrics-collector/config.yaml
+EXPOSE 80
 EXPOSE 8080
 ENTRYPOINT ["metrics-collector", "-config", "/etc/metrics-collector/config.yaml"]

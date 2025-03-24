@@ -5,52 +5,43 @@ import (
 	"errors"
 	"flag"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/mclyashko/monitoring-system/services/metrics-collector/adapters/db"
 	"github.com/mclyashko/monitoring-system/services/metrics-collector/adapters/rest"
 	"github.com/mclyashko/monitoring-system/services/metrics-collector/config"
 	"github.com/mclyashko/monitoring-system/services/metrics-collector/core"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
+	metricsgrpc "github.com/mclyashko/monitoring-system/services/metrics-collector/adapters/grpc"
+	metricspb "github.com/mclyashko/monitoring-system/services/metrics-collector/adapters/grpc/proto"
 )
 
 func main() {
 	cfg := mustLoadConfig()
-
 	log := mustMakeLogger(cfg.LogLevel)
-
 	greetings(log)
 
 	storage := mustMakeStorage(log, &cfg.DB)
-
 	mustMakeMigrations(log, storage, cfg.DB.DBConnString)
 
-	mux := mustMakeMux(log, storage)
-
-	server := &http.Server{
-		Addr:        cfg.AppAddress,
-		ReadTimeout: cfg.ReadTimeout,
-		Handler:     mux,
-	}
+	metricService := core.NewMetricService(log, storage)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	go func() {
-		<-ctx.Done()
-		log.Debug("shutting down server")
-		if err := server.Shutdown(context.Background()); err != nil {
-			log.Error("erroneous shutdown", slog.String("error", err.Error()))
-		}
-	}()
+	grpcServerGracefulStop := mustStartGRPCServer(log, ctx, cfg.GRPCAddress, metricService)
+	restServerGracefulStop := mustStartRESTServer(log, ctx, cfg, metricService)
 
-	if err := server.ListenAndServe(); err != nil {
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Error("server closed unexpectedly", slog.String("error", err.Error()))
-			return
-		}
-	}
+	<-ctx.Done()
+
+	grpcServerGracefulStop()
+	restServerGracefulStop()
 }
 
 func mustLoadConfig() *config.Config {
@@ -108,10 +99,33 @@ func mustMakeMigrations(log *slog.Logger, db *db.DB, connString string) {
 	}
 }
 
-func mustMakeMux(log *slog.Logger, repo core.MetricRepository) *http.ServeMux {
-	mux := http.NewServeMux()
+func mustStartGRPCServer(log *slog.Logger, ctx context.Context, grpcAddress string, metricService *core.MetricService) func() {
+	lis, err := net.Listen("tcp", grpcAddress)
+	if err != nil {
+		log.Error("failed to listen gRPC", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 
-	metricService := core.NewMetricService(log, repo)
+	s := grpc.NewServer()
+	metricspb.RegisterMetricsCollectorServer(s, metricsgrpc.NewServer(log, metricService))
+	reflection.Register(s)
+
+	go func() {
+		log.Info("gRPC server started", slog.String("address", grpcAddress))
+		if err := s.Serve(lis); err != nil {
+			log.Error("gRPC server failed", slog.String("error", err.Error()))
+		}
+	}()
+
+	return func() {
+		log.Debug("stopping gRPC server gracefully")
+		s.GracefulStop()
+		log.Info("gRPC server stopped")
+	}
+}
+
+func mustMakeMux(log *slog.Logger, metricService *core.MetricService) *http.ServeMux {
+	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", rest.NewPingHandler(log))
 	mux.HandleFunc("GET /metric", rest.NewGetMetricByMetricIdentityHandler(log, metricService))
@@ -120,4 +134,31 @@ func mustMakeMux(log *slog.Logger, repo core.MetricRepository) *http.ServeMux {
 	log.Info("mux initialized with routes")
 
 	return mux
+}
+
+func mustStartRESTServer(log *slog.Logger, ctx context.Context, cfg *config.Config, metricService *core.MetricService) func() {
+	mux := mustMakeMux(log, metricService)
+	server := &http.Server{
+		Addr:        cfg.AppAddress,
+		ReadTimeout: cfg.ReadTimeout,
+		Handler:     mux,
+	}
+
+	go func() {
+		log.Info("REST server started", slog.String("address", cfg.AppAddress))
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("REST server closed unexpectedly", slog.String("error", err.Error()))
+		}
+	}()
+
+	return func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+        defer cancel()
+
+		log.Debug("stopping REST server gracefully")
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Error("REST server shutdown error", slog.String("error", err.Error()))
+		}
+		log.Info("REST server stopped")
+	}
 }

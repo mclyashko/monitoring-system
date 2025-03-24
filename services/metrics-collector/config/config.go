@@ -15,6 +15,7 @@ type DB struct {
 type Config struct {
 	LogLevel    string        `yaml:"log_level" env:"LOG_LEVEL"`
 	AppAddress  string        `yaml:"app_address" env:"APP_ADDRESS"`
+	GRPCAddress string        `yaml:"grpc_address" env:"GRPC_ADDRESS"`
 	ReadTimeout time.Duration `yaml:"read_timeout" env:"READ_TIMEOUT"`
 	DB          DB            `yaml:"db"`
 }
