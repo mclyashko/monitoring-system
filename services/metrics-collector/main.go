@@ -12,6 +12,7 @@ import (
 	"github.com/mclyashko/monitoring-system/services/metrics-collector/adapters/db"
 	"github.com/mclyashko/monitoring-system/services/metrics-collector/adapters/rest"
 	"github.com/mclyashko/monitoring-system/services/metrics-collector/config"
+	"github.com/mclyashko/monitoring-system/services/metrics-collector/core"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 
 	mustMakeMigrations(log, storage, cfg.DB.DBConnString)
 
-	mux := mustMakeMux(log)
+	mux := mustMakeMux(log, storage)
 
 	server := &http.Server{
 		Addr:        cfg.AppAddress,
@@ -107,10 +108,14 @@ func mustMakeMigrations(log *slog.Logger, db *db.DB, connString string) {
 	}
 }
 
-func mustMakeMux(log *slog.Logger) *http.ServeMux {
+func mustMakeMux(log *slog.Logger, repo core.MetricRepository) *http.ServeMux {
 	mux := http.NewServeMux()
 
+	metricService := core.NewMetricService(log, repo)
+
 	mux.HandleFunc("GET /", rest.NewPingHandler(log))
+	mux.HandleFunc("GET /metric", rest.NewGetMetricByMetricIdentityHandler(log, metricService))
+	mux.HandleFunc("POST /metric", rest.NewCreateMetricHandler(log, metricService))
 
 	log.Info("mux initialized with routes")
 
