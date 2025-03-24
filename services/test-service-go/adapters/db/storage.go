@@ -73,6 +73,6 @@ func (db *DB) FindByID(orderID int) (*core.Order, error) {
 		return nil, fmt.Errorf("failed to fetch order: %w", err)
 	}
 
-	db.log.Info("order found successfully", slog.Int("order_id", order.ID))
+	db.log.Info("order found successfully", slog.Int("order_id", orderID))
 	return &order, nil
 }

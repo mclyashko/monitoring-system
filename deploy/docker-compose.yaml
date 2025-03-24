@@ -48,6 +48,52 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+  timescaledb:
+    container_name: timescaledb
+    image: timescale/timescaledb:latest-pg17
+    command: "postgres -c log_statement=all"
+    volumes:
+      - ./timescale-data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${TIMESCALEDB_USER}
+      POSTGRES_PASSWORD: ${TIMESCALEDB_PASSWORD}
+      POSTGRES_DB: ${TIMESCALEDB_DB}
+    networks:
+      - monitoring-system-network 
+    restart: always
+    healthcheck:
+      test: "pg_isready -d $${TIMESCALEDB_DB} -U $${TIMESCALEDB_USER}"
+      interval: 10s
+      timeout: 30s
+      retries: 5
+    ports:
+      - "5433:5432"
+  metrics-collector:
+    container_name: metrics-collector
+    image: metrics-collector:latest
+    build:
+      context: ../services/metrics-collector
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DB_CONN_STRING: postgres://${TIMESCALEDB_USER}:${TIMESCALEDB_PASSWORD}@${TIMESCALEDB_HOST}:${TIMESCALEDB_PORT}/${TIMESCALEDB_DB}?sslmode=disable
+    networks:
+      - monitoring-system-network
+    restart: "always"
+    healthcheck:
+      test: "wget --quiet --spider --timeout=10 http://localhost:8080/ || exit 1"
+      interval: 10s
+      timeout: 30s
+      retries: 5
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "81:80"
+      - "8081:8080"
   tests:
     container_name: tests
     image: tests:latest
@@ -58,4 +104,6 @@ services:
     restart: "no"
     depends_on:
       test-service-go:
+        condition: service_healthy
+      metrics-collector:
         condition: service_healthy

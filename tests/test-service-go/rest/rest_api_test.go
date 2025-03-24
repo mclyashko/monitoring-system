@@ -1,4 +1,4 @@
-package test
+package test_service_go_test
 
 import (
 	"bytes"
@@ -15,10 +15,6 @@ const address = "http://localhost:8080"
 
 var client = http.Client{
 	Timeout: 5 * time.Minute,
-}
-
-func TestPreflight(t *testing.T) {
-	require.Equal(t, true, true)
 }
 
 type CreateOrderResponse struct {
